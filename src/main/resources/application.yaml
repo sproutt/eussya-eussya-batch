@@ -17,7 +17,7 @@ spring:
 spring:
   datasource:
     hikari:
-      jdbc-url: jdbc:mysql://localhost:3306/spring_batch
+      jdbc-url: jdbc:mysql://localhost:3306/eussya_eussya_batch
       username: root
       driver-class-name: com.mysql.cj.jdbc.Driver
   config:
