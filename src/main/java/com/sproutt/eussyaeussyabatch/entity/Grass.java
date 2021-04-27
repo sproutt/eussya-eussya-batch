@@ -17,12 +17,12 @@ public class Grass {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private int id;
-    private int memberId;
+    private Long id;
+    private Long memberId;
     private String date;
     private int completeCount;
 
-    public Grass(int id, int memberId, String date, int completeCount) {
+    public Grass(Long id, Long memberId, String date, int completeCount) {
         this.id = id;
         this.memberId = memberId;
         this.date = date;
