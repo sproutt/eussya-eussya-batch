@@ -1,17 +1,20 @@
 package com.sproutt.eussyaeussyabatch.ranking;
 
 import com.sproutt.eussyaeussyabatch.entity.Grass;
-import io.micrometer.core.instrument.util.StringUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.batch.core.*;
+import org.springframework.batch.core.Job;
+import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
 import org.springframework.batch.core.launch.support.RunIdIncrementer;
 import org.springframework.batch.core.step.tasklet.Tasklet;
 import org.springframework.batch.item.ExecutionContext;
 import org.springframework.batch.item.ItemWriter;
+import org.springframework.batch.item.database.BeanPropertyItemSqlParameterSourceProvider;
+import org.springframework.batch.item.database.JdbcBatchItemWriter;
 import org.springframework.batch.item.database.JdbcCursorItemReader;
+import org.springframework.batch.item.database.builder.JdbcBatchItemWriterBuilder;
 import org.springframework.batch.item.database.builder.JdbcCursorItemReaderBuilder;
 import org.springframework.batch.repeat.RepeatStatus;
 import org.springframework.context.annotation.Bean;
@@ -19,7 +22,6 @@ import org.springframework.context.annotation.Configuration;
 
 import javax.sql.DataSource;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -35,7 +37,7 @@ public class RankingJobConfiguration {
                 .incrementer(new RunIdIncrementer())
                 .start(this.calculateMemberActivityCountStep())
                 .next(this.sortMemberActivityCountStep())
-                //.next(this.saveRankingStep())
+                .next(this.saveRankingStep())
                 .build();
     }
 
@@ -44,7 +46,7 @@ public class RankingJobConfiguration {
         return this.stepBuilderFactory.get("calculateMemberActivityCountStep")
                 .<Grass, Grass>chunk(10)
                 .reader(jdbcCursorItemReader())
-                .writer(new saveActivityCountWriter())
+                .writer(new SaveActivityCountWriter())
                 .build();
     }
 
@@ -52,6 +54,15 @@ public class RankingJobConfiguration {
     public Step sortMemberActivityCountStep() {
         return this.stepBuilderFactory.get("sortMemberActivityCountStep")
                 .tasklet(this.tasklet())
+                .build();
+    }
+
+    @Bean
+    public Step saveRankingStep() {
+        return this.stepBuilderFactory.get("saveRankingStep")
+                .<MemberActivity, MemberActivity>chunk(10)
+                .reader(new CustomItemReader<>())
+                .writer(jdbcBatchItemWriter())
                 .build();
     }
 
@@ -70,11 +81,12 @@ public class RankingJobConfiguration {
                     return o2.getActivityCount() - o1.getActivityCount();
                 }
             });
-            jobExecutionContext.put("listMemberActivityCount", memberActivityList);
             for (int i = 0; i < memberActivityList.size(); i++) {
                 MemberActivity memberActivity = memberActivityList.get(i);
-                log.info("memberId : " + memberActivity.getMemberId() + " ranking is : " + (i + 1) + " and activity count : " + memberActivity.getActivityCount());
+                memberActivity.saveRanking(i + 1);
+                log.info("memberId : " + memberActivity.getMemberId() + " ranking is : " + memberActivity.getRanking() + " and activity count : " + memberActivity.getActivityCount());
             }
+            jobExecutionContext.put("memberActivityList", memberActivityList);
             return RepeatStatus.FINISHED;
         };
     }
@@ -89,5 +101,15 @@ public class RankingJobConfiguration {
                 .build();
         itemReader.afterPropertiesSet();
         return itemReader;
+    }
+
+    private ItemWriter<MemberActivity> jdbcBatchItemWriter() {
+        JdbcBatchItemWriter<MemberActivity> itemWriter = new JdbcBatchItemWriterBuilder<MemberActivity>()
+                .dataSource(dataSource)
+                .itemSqlParameterSourceProvider(new BeanPropertyItemSqlParameterSourceProvider<>())
+                .sql("UPDATE member SET ranking = :ranking  WHERE id = :memberId")
+                .build();
+        itemWriter.afterPropertiesSet();
+        return itemWriter;
     }
 }

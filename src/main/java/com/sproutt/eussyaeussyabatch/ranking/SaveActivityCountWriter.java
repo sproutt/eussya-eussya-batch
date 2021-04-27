@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 @Slf4j
-public class saveActivityCountWriter implements ItemWriter<Grass> {
+public class SaveActivityCountWriter implements ItemWriter<Grass> {
     private ExecutionContext jobExecutionContext;
 
     @BeforeStep
