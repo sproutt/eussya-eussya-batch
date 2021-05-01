@@ -7,7 +7,6 @@ import org.springframework.batch.item.ExecutionContext;
 import org.springframework.batch.item.ItemProcessor;
 
 public class CalculateRankingItemProcessor implements ItemProcessor<MemberRanking, MemberRanking> {
-
     private ExecutionContext executionContext;
 
     @BeforeStep
@@ -34,5 +33,4 @@ public class CalculateRankingItemProcessor implements ItemProcessor<MemberRankin
         executionContext.putLong("index", ++index);
         return item;
     }
-
 }
