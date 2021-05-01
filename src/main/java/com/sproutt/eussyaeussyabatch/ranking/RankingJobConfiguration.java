@@ -1,6 +1,6 @@
 package com.sproutt.eussyaeussyabatch.ranking;
 
-import com.sproutt.eussyaeussyabatch.entity.Grass;
+import com.sproutt.eussyaeussyabatch.entity.MemberRanking;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.Job;
@@ -8,20 +8,16 @@ import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
 import org.springframework.batch.core.launch.support.RunIdIncrementer;
-import org.springframework.batch.core.step.tasklet.Tasklet;
-import org.springframework.batch.item.ExecutionContext;
 import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.database.BeanPropertyItemSqlParameterSourceProvider;
 import org.springframework.batch.item.database.JdbcBatchItemWriter;
 import org.springframework.batch.item.database.JdbcCursorItemReader;
 import org.springframework.batch.item.database.builder.JdbcBatchItemWriterBuilder;
 import org.springframework.batch.item.database.builder.JdbcCursorItemReaderBuilder;
-import org.springframework.batch.repeat.RepeatStatus;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import javax.sql.DataSource;
-import java.util.*;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -35,79 +31,42 @@ public class RankingJobConfiguration {
     public Job saveRankingJob() throws Exception {
         return this.jobBuilderFactory.get("saveRankingJob")
                 .incrementer(new RunIdIncrementer())
-                .start(this.calculateMemberActivityCountStep())
-                .next(this.sortMemberActivityCountStep())
-                .next(this.saveRankingStep())
+                .start(this.saveRankingStep())
+                .listener(new RankingJobExecutionListener())
                 .build();
     }
 
     @Bean
-    public Step calculateMemberActivityCountStep() throws Exception {
-        return this.stepBuilderFactory.get("calculateMemberActivityCountStep")
-                .<Grass, Grass>chunk(10)
-                .reader(jdbcCursorItemReader())
-                .writer(new SaveActivityCountWriter())
-                .build();
-    }
-
-    @Bean
-    public Step sortMemberActivityCountStep() {
-        return this.stepBuilderFactory.get("sortMemberActivityCountStep")
-                .tasklet(this.tasklet())
-                .build();
-    }
-
-    @Bean
-    public Step saveRankingStep() {
+    public Step saveRankingStep() throws Exception {
         return this.stepBuilderFactory.get("saveRankingStep")
-                .<MemberActivity, MemberActivity>chunk(10)
-                .reader(new CustomItemReader<>())
+                .<MemberRanking, MemberRanking>chunk(10)
+                .reader(jdbcCursorItemReader())
+                .processor(new CalculateRankingItemProcessor())
                 .writer(jdbcBatchItemWriter())
                 .build();
     }
 
-    @Bean
-    public Tasklet tasklet() {
-        return (contribution, chunkContext) -> {
-            ExecutionContext jobExecutionContext = contribution.getStepExecution().getJobExecution().getExecutionContext();
-            List<MemberActivity> memberActivityList = new ArrayList<MemberActivity>();
-            Map<Long, Integer> activityCountMap = (Map<Long, Integer>) jobExecutionContext.get("activityCountMap");
-            for (Long memberId : activityCountMap.keySet()) {
-                memberActivityList.add(new MemberActivity(memberId, activityCountMap.get(memberId)));
-            }
-            Collections.sort(memberActivityList, new Comparator<MemberActivity>() {
-                @Override
-                public int compare(MemberActivity o1, MemberActivity o2) {
-                    return o2.getActivityCount() - o1.getActivityCount();
-                }
-            });
-            for (int i = 0; i < memberActivityList.size(); i++) {
-                MemberActivity memberActivity = memberActivityList.get(i);
-                memberActivity.saveRanking(i + 1);
-                log.info("memberId : " + memberActivity.getMemberId() + " ranking is : " + memberActivity.getRanking() + " and activity count : " + memberActivity.getActivityCount());
-            }
-            jobExecutionContext.put("memberActivityList", memberActivityList);
-            return RepeatStatus.FINISHED;
-        };
-    }
-
-    private JdbcCursorItemReader<Grass> jdbcCursorItemReader() throws Exception {
-        JdbcCursorItemReader<Grass> itemReader = new JdbcCursorItemReaderBuilder<Grass>()
+    private JdbcCursorItemReader<MemberRanking> jdbcCursorItemReader() throws Exception {
+        JdbcCursorItemReader<MemberRanking> itemReader = new JdbcCursorItemReaderBuilder<MemberRanking>()
                 .name("jdbcCursorItemReader")
                 .dataSource(dataSource)
-                .sql("SELECT id, member_id, date, complete_count from grass")
-                .rowMapper((rs, rowNum) -> new Grass(
-                        rs.getLong(1), rs.getLong(2), rs.getString(3), rs.getInt(4)))
+                .sql("SELECT member_id, sum(complete_count) AS activity_count " +
+                        "FROM grass " +
+                        "GROUP BY member_id " +
+                        "ORDER BY activity_count " +
+                        "DESC")
+                .rowMapper((rs, rowNum) -> new MemberRanking(
+                        rs.getLong(1), rs.getInt(2)))
                 .build();
         itemReader.afterPropertiesSet();
         return itemReader;
     }
 
-    private ItemWriter<MemberActivity> jdbcBatchItemWriter() {
-        JdbcBatchItemWriter<MemberActivity> itemWriter = new JdbcBatchItemWriterBuilder<MemberActivity>()
+    private ItemWriter<MemberRanking> jdbcBatchItemWriter() {
+        JdbcBatchItemWriter<MemberRanking> itemWriter = new JdbcBatchItemWriterBuilder<MemberRanking>()
                 .dataSource(dataSource)
                 .itemSqlParameterSourceProvider(new BeanPropertyItemSqlParameterSourceProvider<>())
-                .sql("UPDATE member SET ranking = :ranking  WHERE id = :memberId")
+                .sql("UPDATE member SET ranking = :ranking WHERE id = :id")
                 .build();
         itemWriter.afterPropertiesSet();
         return itemWriter;
