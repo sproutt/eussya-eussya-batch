@@ -8,7 +8,6 @@ import org.springframework.batch.core.JobExecutionListener;
 public class RankingJobExecutionListener implements JobExecutionListener {
     @Override
     public void beforeJob(JobExecution jobExecution) {
-
     }
 
     @Override
