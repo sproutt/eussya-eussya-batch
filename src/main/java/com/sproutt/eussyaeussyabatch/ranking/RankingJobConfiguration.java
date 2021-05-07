@@ -1,8 +1,7 @@
 package com.sproutt.eussyaeussyabatch.ranking;
 
-import com.sproutt.eussyaeussyabatch.entity.MemberRanking;
+import com.sproutt.eussyaeussyabatch.ranking.dto.MemberRanking;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
@@ -40,7 +39,7 @@ public class RankingJobConfiguration {
         return this.stepBuilderFactory.get("saveRankingStep")
                 .<MemberRanking, MemberRanking>chunk(10)
                 .reader(jdbcCursorItemReader())
-                .processor(new CalculateRankingItemProcessor())
+                .processor(new RankingItemProcessor())
                 .writer(jdbcBatchItemWriter())
                 .build();
     }
@@ -49,11 +48,13 @@ public class RankingJobConfiguration {
         JdbcCursorItemReader<MemberRanking> itemReader = new JdbcCursorItemReaderBuilder<MemberRanking>()
                 .name("jdbcCursorItemReader")
                 .dataSource(dataSource)
-                .sql("SELECT member_id, sum(complete_count) AS activity_count " +
-                        "FROM grass " +
-                        "GROUP BY member_id " +
-                        "ORDER BY activity_count " +
-                        "DESC")
+                .sql("SELECT m.id, ifnull(a.activity_count,0) AS activity_count FROM member AS m " +
+                        "LEFT OUTER JOIN " +
+                        "(SELECT member_id, sum(complete_count) AS activity_count " +
+                        "FROM grass AS g " +
+                        "GROUP BY member_id) " +
+                        "AS a ON m.id = a.member_id " +
+                        "ORDER BY activity_count DESC;")
                 .rowMapper((rs, rowNum) -> new MemberRanking(
                         rs.getLong(1), rs.getInt(2)))
                 .build();

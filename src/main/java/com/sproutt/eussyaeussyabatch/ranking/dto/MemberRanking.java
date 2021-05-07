@@ -1,19 +1,9 @@
-package com.sproutt.eussyaeussyabatch.entity;
+package com.sproutt.eussyaeussyabatch.ranking.dto;
 
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 
-import javax.persistence.Entity;
-import javax.persistence.GeneratedValue;
-import javax.persistence.GenerationType;
-import javax.persistence.Id;
-
-@Entity
-@NoArgsConstructor
 @Getter
 public class MemberRanking {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     private int activityCount;
     private Long ranking;
