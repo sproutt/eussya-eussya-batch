@@ -66,7 +66,7 @@ public class RankingJobConfiguration {
         JdbcBatchItemWriter<MemberRanking> itemWriter = new JdbcBatchItemWriterBuilder<MemberRanking>()
                 .dataSource(dataSource)
                 .itemSqlParameterSourceProvider(new BeanPropertyItemSqlParameterSourceProvider<>())
-                .sql("UPDATE member SET ranking = :ranking WHERE id = :id")
+                .sql("UPDATE member SET ranking = :ranking, modify_date = :modifyDate WHERE id = :id")
                 .build();
         itemWriter.afterPropertiesSet();
         return itemWriter;
